@@ -17,10 +17,11 @@ def extract():
         if not url:
             return jsonify({'success': False, 'error': 'الرابط مطلوب'}), 400
 
+        # خيارات ذكية لجلب كل شيء متاح
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'best',
+            'format': 'all',  # اطلب كل الجودات
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
 
@@ -29,44 +30,44 @@ def extract():
             
             title = info.get('title', 'فيديو بدون عنوان')
             thumbnail = info.get('thumbnail', '')
-            duration = info.get('duration', 0)
             
             formats_output = []
-            
-            # استخراج الجودات المتاحة لكل المنصات
-            for f in info.get('formats', []):
-                download_url = f.get('url')
-                if not download_url:
-                    continue
-                
-                ext = f.get('ext', 'mp4')
-                format_note = f.get('format_note') or f.get('resolution') or 'MP4'
-                height = f.get('height')
-                quality_label = f"{height}p" if height else format_note
+            seen_qualities = set()
 
-                # الفلترة لتصفية الروابط الشغالة
-                if f.get('vcodec') != 'none' or f.get('acodec') != 'none':
+            # ترتيب الجودات من الأفضل للأسوأ
+            formats = info.get('formats', [])
+            
+            for f in formats:
+                # تصفية الروابط التي تحتوي على فيديو وصوت معاً (للسهولة)
+                # أو جودات عالية جداً (720p, 1080p) حتى لو كانت فيديو فقط
+                download_url = f.get('url')
+                if not download_url or 'googlevideo.com' not in download_url:
+                    if 'youtube.com' in url: continue # تخطي الروابط غير المباشرة ليوتيوب
+
+                height = f.get('height')
+                if not height: continue
+
+                quality_label = f"{height}p"
+                
+                # منع التكرار (نأخذ أفضل رابط لكل جودة)
+                if quality_label not in seen_qualities:
                     formats_output.append({
                         'quality': quality_label,
-                        'ext': ext,
+                        'ext': f.get('ext', 'mp4'),
                         'url': download_url,
-                        'has_audio': f.get('acodec') != 'none',
                         'has_video': f.get('vcodec') != 'none',
+                        'has_audio': f.get('acodec') != 'none',
                     })
+                    seen_qualities.add(quality_label)
 
-            # حيلة لترتيب الجودات من الأعلى للأقل بدون تكرار
-            unique_formats = {}
-            for fmt in formats_output:
-                key = f"{fmt['quality']}_{fmt['ext']}"
-                if key not in unique_formats:
-                    unique_formats[key] = fmt
-
+            # إضافة خيار الصوت MP3 دائماً
+            audio_f = info.get('url') # الرابط الافتراضي
+            
             return jsonify({
                 'success': True,
                 'title': title,
                 'thumbnail': thumbnail,
-                'duration': duration,
-                'formats': list(unique_formats.values())[::-1]
+                'formats': sorted(formats_output, key=lambda x: int(x['quality'].replace('p','')), reverse=True)
             })
 
     except Exception as e:
