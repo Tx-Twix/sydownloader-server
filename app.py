@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "SyDownloader Stealth Engine Active! 🇸🇾"})
+    return jsonify({"status": "SyDownloader Ultra-Engine Active! 🇸🇾🔥"})
 
 @app.route('/extract', methods=['POST'])
 def extract():
@@ -14,21 +14,13 @@ def extract():
         data = request.get_json(force=True)
         url = data.get('url', '').strip()
         if not url:
-            return jsonify({'success': False, 'error': 'الرابط مطلوب'})
+            return jsonify({'success': False, 'error': 'الرابط مطلوب'}), 400
 
-        # 🚀 إعدادات "التخفي" لتقليد تطبيقات الموبايل وتجاوز حظر البوت
+        # إعدادات قوية جداً لجلب روابط الفيديو المباشرة بجميع الجودات
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'best',
-            'extract_flat': False,
-            # هذه الأسطر تخبر يوتيوب أن الطلب قادم من أندرويد أو آيفون وليس سيرفر
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios'],
-                    'skip': ['webpage', 'hls']
-                }
-            }
+            'format': 'best', # سيبحث عن أفضل جودة مدمجة تلقائياً
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -38,37 +30,46 @@ def extract():
             extracted_formats = []
             seen_heights = set()
 
+            # 1. جلب الجودات المدمجة (فيديو + صوت) - يوتيوب يوفر 720p مدمجة غالباً
             for f in formats:
                 if not f.get('url'): continue
                 
-                height = f.get('height')
-                if not height or height < 144: continue
-                
-                quality_label = f"{height}p"
-                
-                if quality_label not in seen_heights:
-                    extracted_formats.append({
-                        'quality': quality_label,
-                        'url': f.get('url'),
-                        'ext': 'mp4',
-                        'has_audio': f.get('acodec') != 'none',
-                        'height': height
-                    })
-                    seen_heights.add(quality_label)
+                # التأكد أن الرابط يحتوي على فيديو وصوت معاً ليعمل فوراً عند المستخدم
+                if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                    height = f.get('height')
+                    if height:
+                        quality_label = f"{height}p"
+                        if quality_label not in seen_heights:
+                            extracted_formats.append({
+                                'quality': quality_label,
+                                'height': height,
+                                'ext': f.get('ext', 'mp4'),
+                                'url': f.get('url'),
+                                'has_audio': True,
+                                'size': f.get('filesize') or f.get('filesize_approx') or 0
+                            })
+                            seen_heights.add(quality_label)
 
-            # ترتيب الجودات
+            # 2. جلب رابط الصوت MP3 بأعلى جودة
+            audio_url = ""
+            for f in reversed(formats):
+                if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                    audio_url = f.get('url')
+                    break
+
+            # ترتيب الجودات من الأعلى (720p) إلى الأقل (144p)
             extracted_formats.sort(key=lambda x: x['height'], reverse=True)
 
             return jsonify({
                 'success': True,
                 'title': info.get('title', 'Video'),
                 'thumbnail': info.get('thumbnail', ''),
+                'audio_url': audio_url,
                 'formats': extracted_formats
             })
 
     except Exception as e:
-        # إرسال رسالة خطأ واضحة
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
