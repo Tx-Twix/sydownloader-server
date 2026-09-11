@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "SyDownloader Server is Ready! 🇸🇾"})
+    return jsonify({"status": "SyDownloader Stealth Engine Active! 🇸🇾"})
 
 @app.route('/extract', methods=['POST'])
 def extract():
@@ -16,12 +16,19 @@ def extract():
         if not url:
             return jsonify({'success': False, 'error': 'الرابط مطلوب'})
 
-        # إعدادات ذكية لجلب الروابط المباشرة دون تحميلها على السيرفر
+        # 🚀 إعدادات "التخفي" لتقليد تطبيقات الموبايل وتجاوز حظر البوت
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'format': 'best',
             'extract_flat': False,
+            # هذه الأسطر تخبر يوتيوب أن الطلب قادم من أندرويد أو آيفون وليس سيرفر
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios'],
+                    'skip': ['webpage', 'hls']
+                }
+            }
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -32,15 +39,13 @@ def extract():
             seen_heights = set()
 
             for f in formats:
-                # تصفية الروابط الشغالة والمباشرة فقط
-                if not f.get('url') or 'manifest' in f.get('url'): continue
+                if not f.get('url'): continue
                 
                 height = f.get('height')
                 if not height or height < 144: continue
                 
                 quality_label = f"{height}p"
                 
-                # نحن نريد الروابط التي تحتوي على فيديو (سواء بصوت أو بدون)
                 if quality_label not in seen_heights:
                     extracted_formats.append({
                         'quality': quality_label,
@@ -51,11 +56,8 @@ def extract():
                     })
                     seen_heights.add(quality_label)
 
-            # ترتيب الجودات من الأعلى للأقل
+            # ترتيب الجودات
             extracted_formats.sort(key=lambda x: x['height'], reverse=True)
-
-            # جلب رابط الصوت فقط MP3
-            audio_url = info.get('url') # رابط احتياطي
 
             return jsonify({
                 'success': True,
@@ -65,6 +67,7 @@ def extract():
             })
 
     except Exception as e:
+        # إرسال رسالة خطأ واضحة
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
