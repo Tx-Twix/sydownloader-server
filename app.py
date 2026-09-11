@@ -16,11 +16,12 @@ def extract():
         if not url:
             return jsonify({'success': False, 'error': 'الرابط مطلوب'}), 400
 
-        # إعدادات احترافية لجلب الروابط المدمجة (صوت + صورة) حصراً بكافة الجودات
+        # إعدادات قوية جداً لجلب كافة الجودات المدمجة (صوت + صورة)
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'best[ext=mp4]/best', # ابحث عن أفضل ملف مدمج جاهز
+            # البحث عن أفضل جودة مدمجة (فيديو+صوت) أو أفضل فيديو متاح
+            'format': 'best[ext=mp4]/best', 
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -30,37 +31,30 @@ def extract():
             extracted_formats = []
             seen_heights = set()
 
-            # 1. جلب الجودات المدمجة (صوت + صورة مع بعض) - هاد اللي بدك ياه!
+            # ترتيب الصيغ لنبحث عن المدمج أولاً
             for f in formats:
-                # التأكد أن الرابط مباشر ويحتوي فيديو وصوت معاً
+                # شرط أساسي: لازم يكون فيديو وصوت مع بعض (مشان يشتغل عندك بدون تعليق)
                 if f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
                     height = f.get('height')
-                    if height and height not in seen_heights:
-                        extracted_formats.append({
-                            'quality': f"{height}p",
-                            'height': height,
-                            'ext': 'mp4',
-                            'url': f.get('url'),
-                            'has_audio': True,
-                            'has_video': True
-                        })
-                        seen_heights.add(height)
+                    if height:
+                        quality_label = f"{height}p"
+                        if quality_label not in seen_heights:
+                            extracted_formats.append({
+                                'quality': quality_label,
+                                'height': height,
+                                'ext': 'mp4',
+                                'url': f.get('url'),
+                                'size': f.get('filesize') or f.get('filesize_approx') or 0
+                            })
+                            seen_heights.add(quality_label)
 
-            # 2. جلب رابط الصوت فقط (MP3/M4A)
-            audio_url = ""
-            for f in formats:
-                if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
-                    audio_url = f.get('url')
-                    break
-
-            # ترتيب الجودات من الأكبر (720p أو 1080p) للأصغر
+            # ترتيب الجودات من الأعلى للأقل (مثلاً 720p ثم 360p)
             extracted_formats.sort(key=lambda x: x['height'], reverse=True)
 
             return jsonify({
                 'success': True,
                 'title': info.get('title', 'فيديو جديد'),
                 'thumbnail': info.get('thumbnail', ''),
-                'audio_url': audio_url,
                 'formats': extracted_formats
             })
 
