@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "SyDownloader Super Server Active! 🇸🇾🔥"})
+    return jsonify({"status": "SyDownloader Ultra Server Active! 🇸🇾🔥"})
 
 @app.route('/extract', methods=['POST'])
 def extract():
@@ -16,13 +16,12 @@ def extract():
         if not url:
             return jsonify({'success': False, 'error': 'الرابط مطلوب'}), 400
 
-        # إعدادات قوية جداً لجلب كافة الجودات المخفية
+        # إعدادات قوية جداً لجلب روابط الفيديو المباشرة بجميع الجودات
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'bestvideo+bestaudio/best',
-            'youtube_include_dash_manifest': True,
-            'youtube_include_hls_manifest': True,
+            'format': 'all', # جلب كل الصيغ بدون استثناء
+            'get_urls': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -30,45 +29,45 @@ def extract():
             formats = info.get('formats', [])
             
             extracted_formats = []
-            seen = set()
+            seen_qualities = set()
 
             for f in formats:
-                if not f.get('url'): continue
+                # تصفية الروابط التي تعمل مباشرة فقط
+                if not f.get('url') or 'manifest' in f.get('url'): continue
                 
-                # جلب الجودة (مثلاً 1080, 720, 480)
                 height = f.get('height')
                 if not height: continue
                 
+                # نحن نريد الجودات الأساسية: 144, 240, 360, 480, 720, 1080
                 quality_label = f"{height}p"
-                ext = f.get('ext', 'mp4')
-                vcodec = f.get('vcodec', 'none')
-                acodec = f.get('acodec', 'none')
                 
-                # تصنيف الجودة
-                has_video = vcodec != 'none'
-                has_audio = acodec != 'none'
-                
-                # مفتاح لمنع التكرار
-                key = f"{quality_label}_{has_audio}"
-                
-                if key not in seen:
+                # منع التكرار لنفس الجودة
+                if quality_label not in seen_qualities:
                     extracted_formats.append({
                         'quality': quality_label,
-                        'ext': ext,
+                        'height': height,
+                        'ext': f.get('ext', 'mp4'),
                         'url': f.get('url'),
-                        'has_audio': has_audio,
-                        'has_video': has_video,
-                        'size': f.get('filesize') or f.get('filesize_approx') or 0
+                        'has_audio': f.get('acodec') != 'none',
+                        'has_video': f.get('vcodec') != 'none',
                     })
-                    seen.add(key)
+                    seen_qualities.add(quality_label)
 
-            # ترتيب من الأعلى للأقل
-            extracted_formats.sort(key=lambda x: int(x['quality'].replace('p','')), reverse=True)
+            # إضافة خيار الصوت MP3 بأعلى جودة
+            audio_url = ""
+            for f in reversed(formats):
+                if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                    audio_url = f.get('url')
+                    break
+
+            # ترتيب الجودات من الأعلى (1080) إلى الأقل (144)
+            extracted_formats.sort(key=lambda x: x['height'], reverse=True)
 
             return jsonify({
                 'success': True,
-                'title': info.get('title', 'فيديو'),
+                'title': info.get('title', 'Video'),
                 'thumbnail': info.get('thumbnail', ''),
+                'audio_url': audio_url,
                 'formats': extracted_formats
             })
 
